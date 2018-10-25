@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.23107.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperCache", "SuperCache\SuperCache.csproj", "{1768B553-A9FF-4BE8-8B68-59FA10C68B16}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SuperCache.UnitTests", "SuperCache.UnitTests\SuperCache.UnitTests.csproj", "{943CA746-E97A-4F61-82D6-8F99FCC9F394}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1768B553-A9FF-4BE8-8B68-59FA10C68B16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1768B553-A9FF-4BE8-8B68-59FA10C68B16}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1768B553-A9FF-4BE8-8B68-59FA10C68B16}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1768B553-A9FF-4BE8-8B68-59FA10C68B16}.Release|Any CPU.Build.0 = Release|Any CPU
+		{943CA746-E97A-4F61-82D6-8F99FCC9F394}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{943CA746-E97A-4F61-82D6-8F99FCC9F394}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{943CA746-E97A-4F61-82D6-8F99FCC9F394}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{943CA746-E97A-4F61-82D6-8F99FCC9F394}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
