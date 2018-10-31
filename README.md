@@ -36,7 +36,7 @@ public void MyMethod()
   // expire any result from SomeMethod that may be cached
   cache.Expire.SomeMethod(1, "two");
 
-  // purge any result form SomeMethod that may be cached
+  // purge any result from SomeMethod that may be cached
   cache.Purge.SomeMethod(1, "two");
   
   // manually insert into the cache
