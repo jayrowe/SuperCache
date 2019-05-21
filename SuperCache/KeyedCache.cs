@@ -1,7 +1,7 @@
-﻿using System;
+﻿using SuperCache.Policies;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using SuperCache.Policies;
 
 namespace SuperCache
 {
@@ -11,9 +11,15 @@ namespace SuperCache
         void ExpireAll();
         ICacheExpirationPolicy ExpirationPolicy { get; set; }
         ICacheFetchRetryPolicy FetchRetryPolicy { get; set; }
+        ICacheValuePolicy ValuePolicy { set; }
     }
 
-    public class KeyedCache<TSource, TKey, TResult> : IKeyedCache
+    public interface IKeyedCache<TResult>
+    {
+        ICacheValuePolicy<TResult> ValuePolicy { get; set; }
+    }
+
+    public class KeyedCache<TSource, TKey, TResult> : IKeyedCache, IKeyedCache<TResult>
         where TKey : IFetchable<TSource, TResult>
     {
         private readonly TSource _source;
@@ -21,12 +27,14 @@ namespace SuperCache
         private readonly LinkedList<TKey> _keys = new LinkedList<TKey>();
         private ICacheExpirationPolicy _expirationPolicy;
         private ICacheFetchRetryPolicy _fetchRetryPolicy;
+        private ICacheValuePolicy<TResult> _valuePolicy;
 
         public KeyedCache(TSource source)
         {
             _source = source;
             _expirationPolicy = new NeverExpireCacheExpirationPolicy();
             _fetchRetryPolicy = new AlwaysCacheFetchRetryPolicy();
+            _valuePolicy = new IdentityCacheValuePolicy<TResult>();
         }
 
         private KeyedCacheSlot GetOrCreateSlot(TKey key)
@@ -69,7 +77,8 @@ namespace SuperCache
             }
 
             slot.LastAccess = TimeProvider.UtcNow;
-            return (TResult)slot.CachedObject;
+
+            return _valuePolicy.Retrieve(slot.CachedObject);
         }
 
         private void AttemptFetch(TKey key, KeyedCacheSlot slot)
@@ -84,7 +93,7 @@ namespace SuperCache
 
             try
             {
-                slot.CachedObject = key.Fetch(_source);
+                slot.CachedObject = _valuePolicy.Store(key.Fetch(_source));
                 slot.HasCachedValue = true;
                 slot.LastFetchSuccess = TimeProvider.UtcNow;
                 slot.LastFetchException = null;
@@ -164,6 +173,31 @@ namespace SuperCache
         {
             get { return _fetchRetryPolicy; }
             set { _fetchRetryPolicy = value ?? new AlwaysCacheFetchRetryPolicy(); }
+        }
+
+        ICacheValuePolicy<TResult> IKeyedCache<TResult>.ValuePolicy
+        {
+            get { return _valuePolicy; }
+            set { _valuePolicy = value ?? new IdentityCacheValuePolicy<TResult>(); }
+        }
+
+        ICacheValuePolicy IKeyedCache.ValuePolicy
+        {
+            set
+            {
+                switch (value)
+                {
+                    case null:
+                        _valuePolicy = new IdentityCacheValuePolicy<TResult>();
+                        break;
+                    case ICacheValuePolicy<TResult> specific:
+                        _valuePolicy = specific;
+                        break;
+                    default:
+                        _valuePolicy = new ShimCacheValuePolicy<TResult>(value);
+                        break;
+                }
+            }
         }
 
         void IKeyedCache.PurgeAll()

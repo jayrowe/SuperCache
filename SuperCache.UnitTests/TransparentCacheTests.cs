@@ -785,6 +785,116 @@ namespace SuperCache.UnitTests
         }
         #endregion
 
+        #region ICacheValuePolicy integration
+        [TestMethod]
+        public void SetSpecificPolicy()
+        {
+            // we return these from the source
+            var source = new object();
+
+            // we store these in the cache
+            var cached = new object();
+
+            // we translate to these on retrieval
+            var retrieved = new object();
+
+            var sourceMock = new Mock<IOverloaded>();
+            sourceMock.Setup(i => i.Overloaded("first")).Returns(source);
+
+            var valuePolicyMock = new Mock<ICacheValuePolicy<object>>();
+            valuePolicyMock.Setup(p => p.Store(source)).Returns(cached).Verifiable();
+            valuePolicyMock.Setup(p => p.Retrieve(cached)).Returns(retrieved).Verifiable();
+
+            var builder = new TransparentCacheBuilder<IOverloaded>(sourceMock.Object);
+            builder.SetPolicy(valuePolicyMock.Object, i => i.Overloaded("first"));
+
+            var cache = builder.Create();
+
+            Assert.AreSame(retrieved, cache.Cached.Overloaded("first"));
+            Assert.AreSame(retrieved, cache.Cached.Overloaded("first"));
+
+            valuePolicyMock.Verify(p => p.Store(source), Times.Once);
+            valuePolicyMock.Verify(p => p.Retrieve(cached), Times.Exactly(2));
+        }
+
+        [TestMethod]
+        public void SetDefaultValuePolicy()
+        {
+            // we return these from the source
+            var first = new object();
+            var second = new object();
+
+            // we store these in the cache
+            var firstCached = new object();
+            var secondCached = new object();
+
+            // we translate to these on retrieval
+            var firstRetrieved = new object();
+            var secondRetrieved = new object();
+
+            var sourceMock = new Mock<IOverloaded>();
+            sourceMock.Setup(i => i.Overloaded("first")).Returns(first);
+            sourceMock.Setup(i => i.Overloaded("first", "second")).Returns(second);
+
+            var valuePolicyMock = new Mock<ICacheValuePolicy>();
+            valuePolicyMock.Setup(p => p.Store(first)).Returns(firstCached).Verifiable();
+            valuePolicyMock.Setup(p => p.Store(second)).Returns(secondCached).Verifiable();
+            valuePolicyMock.Setup(p => p.Retrieve<object>(firstCached)).Returns(firstRetrieved).Verifiable();
+            valuePolicyMock.Setup(p => p.Retrieve<object>(secondCached)).Returns(secondRetrieved).Verifiable();
+
+            var builder = new TransparentCacheBuilder<IOverloaded>(sourceMock.Object);
+            builder.SetDefaultPolicy(valuePolicyMock.Object);
+
+            var cache = builder.Create();
+
+            Assert.AreSame(firstRetrieved, cache.Cached.Overloaded("first"));
+            Assert.AreSame(firstRetrieved, cache.Cached.Overloaded("first"));
+            Assert.AreSame(secondRetrieved, cache.Cached.Overloaded("first", "second"));
+            Assert.AreSame(secondRetrieved, cache.Cached.Overloaded("first", "second"));
+
+            valuePolicyMock.Verify(p => p.Store(first), Times.Once);
+            valuePolicyMock.Verify(p => p.Store(second), Times.Once);
+            valuePolicyMock.Verify(p => p.Retrieve<object>(firstCached), Times.Exactly(2));
+            valuePolicyMock.Verify(p => p.Retrieve<object>(secondCached), Times.Exactly(2));
+        }
+
+        [TestMethod]
+        public void SetDefaultValuePolicy_Overridden()
+        {
+            // we return these from the source
+            var first = new object();
+            var second = new object();
+
+            // we store these in the cache
+            var secondCached = new object();
+
+            // we translate to these on retrieval
+            var secondRetrieved = new object();
+
+            var sourceMock = new Mock<IOverloaded>();
+            sourceMock.Setup(i => i.Overloaded("first")).Returns(first);
+            sourceMock.Setup(i => i.Overloaded("first", "second")).Returns(second);
+
+            var valuePolicyMock = new Mock<ICacheValuePolicy>();
+            valuePolicyMock.Setup(p => p.Store(second)).Returns(secondCached).Verifiable();
+            valuePolicyMock.Setup(p => p.Retrieve<object>(secondCached)).Returns(secondRetrieved).Verifiable();
+
+            var builder = new TransparentCacheBuilder<IOverloaded>(sourceMock.Object);
+            builder.SetPolicy(new IdentityCacheValuePolicy<object>(), i => i.Overloaded("first"));
+            builder.SetDefaultPolicy(valuePolicyMock.Object);
+
+            var cache = builder.Create();
+
+            Assert.AreSame(first, cache.Cached.Overloaded("first"));
+            Assert.AreSame(secondRetrieved, cache.Cached.Overloaded("first", "second"));
+            Assert.AreSame(secondRetrieved, cache.Cached.Overloaded("first", "second"));
+
+            valuePolicyMock.Verify(p => p.Store(first), Times.Never);
+            valuePolicyMock.Verify(p => p.Store(second), Times.Once);
+            valuePolicyMock.Verify(p => p.Retrieve<object>(secondCached), Times.Exactly(2));
+        }
+        #endregion
+
         #region ExpireAll (All caches)
         [TestMethod]
         public void ExpireAll_AllCaches()
