@@ -1,35 +1,19 @@
 ﻿using SuperCache.Policies;
-using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace SuperCache
 {
-    public interface IKeyedCache
+    public abstract class KeyedCacheBase<TSource, TKey, TResult> : IKeyedCache, IKeyedCache<TResult>
     {
-        void PurgeAll();
-        void ExpireAll();
-        ICacheExpirationPolicy ExpirationPolicy { get; set; }
-        ICacheFetchRetryPolicy FetchRetryPolicy { get; set; }
-        ICacheValuePolicy ValuePolicy { set; }
-    }
-
-    public interface IKeyedCache<TResult>
-    {
-        ICacheValuePolicy<TResult> ValuePolicy { get; set; }
-    }
-
-    public class KeyedCache<TSource, TKey, TResult> : IKeyedCache, IKeyedCache<TResult>
-        where TKey : IFetchable<TSource, TResult>
-    {
-        private readonly TSource _source;
+        protected readonly TSource _source;
         private readonly ConcurrentDictionary<TKey, KeyedCacheSlot> _cache = new ConcurrentDictionary<TKey, KeyedCacheSlot>();
         private readonly LinkedList<TKey> _keys = new LinkedList<TKey>();
-        private ICacheExpirationPolicy _expirationPolicy;
-        private ICacheFetchRetryPolicy _fetchRetryPolicy;
-        private ICacheValuePolicy<TResult> _valuePolicy;
+        protected ICacheExpirationPolicy _expirationPolicy;
+        protected ICacheFetchRetryPolicy _fetchRetryPolicy;
+        protected ICacheValuePolicy<TResult> _valuePolicy;
 
-        public KeyedCache(TSource source)
+        public KeyedCacheBase(TSource source)
         {
             _source = source;
             _expirationPolicy = new NeverExpireCacheExpirationPolicy();
@@ -37,7 +21,7 @@ namespace SuperCache
             _valuePolicy = new IdentityCacheValuePolicy<TResult>();
         }
 
-        private KeyedCacheSlot GetOrCreateSlot(TKey key)
+        protected KeyedCacheSlot GetOrCreateSlot(TKey key)
         {
             if (!_cache.TryGetValue(key, out var slot))
             {
@@ -59,71 +43,10 @@ namespace SuperCache
             return slot;
         }
 
-        public TResult Get(TKey key)
-        {
-            var slot = GetOrCreateSlot(key);
-
-            if (!slot.HasCachedValue || _expirationPolicy.IsExpired(slot))
-            {
-                // TODO: this is probably right in most instances, but may not be in some cases
-                // TODO: change this so it can be modified by setting a policy
-                lock (slot)
-                {
-                    if (!slot.HasCachedValue || _expirationPolicy.IsExpired(slot))
-                    {
-                        AttemptFetch(key, slot);
-                    }
-                }
-            }
-
-            slot.LastAccess = TimeProvider.UtcNow;
-
-            return _valuePolicy.Retrieve(slot.CachedObject);
-        }
-
-        private void AttemptFetch(TKey key, KeyedCacheSlot slot)
-        {
-            if (slot.LastFetchException != null && !_fetchRetryPolicy.ShouldRetry(slot))
-            {
-                throw new CacheFetchRetrySuppressedException(slot.LastFetchException);
-            }
-
-            bool success = false;
-            slot.LastFetchAttempt = TimeProvider.UtcNow;
-
-            try
-            {
-                slot.CachedObject = _valuePolicy.Store(key.Fetch(_source));
-                slot.HasCachedValue = true;
-                slot.LastFetchSuccess = TimeProvider.UtcNow;
-                slot.LastFetchException = null;
-                _expirationPolicy.Fetched(slot);
-                success = true;
-            }
-            catch (Exception ex)
-            {
-                slot.LastFetchException = ex;
-
-                if (slot.HasCachedValue && _expirationPolicy.AllowExpiredResult(slot))
-                {
-                    return;
-                }
-
-                slot.HasCachedValue = false;
-                slot.CachedObject = default(TResult);
-
-                throw;
-            }
-            finally
-            {
-                _fetchRetryPolicy.FetchAttempted(slot, success);
-            }
-        }
-
         public TResult Purge(TKey key)
         {
-            _cache.TryRemove(key, out _);
-            return default;
+            _cache.TryRemove(key, out var slot);
+            return (TResult)slot.CachedObject;
         }
 
         public TResult Expire(TKey key)

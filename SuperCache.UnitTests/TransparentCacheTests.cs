@@ -4,6 +4,7 @@ using Moq.Language.Flow;
 using SuperCache.Policies;
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace SuperCache.UnitTests
 {
@@ -571,6 +572,25 @@ namespace SuperCache.UnitTests
             defaultRetryPolicyMock.Verify(p => p.FetchAttempted(It.IsAny<KeyedCacheSlot>(), true), Times.Once);
             retryPolicyMock.Verify(p => p.FetchAttempted(It.IsAny<KeyedCacheSlot>(), true), Times.Once);
         }
+
+        [TestMethod]
+        public async Task Async_RetriesOnException()
+        {
+            var result = new object();
+
+            var sourceMock = new Mock<IAsync>();
+            sourceMock.Setup(i => i.WithReturnValueAsync("param")).ReturnsSequence(
+                () => Task.FromException<object>(new MissingMethodException("failed to load")),
+                () => Task.FromResult(result));
+
+            var builder = new TransparentCacheBuilder<IAsync>(sourceMock.Object);
+            builder.SetDefaultPolicy(new AlwaysCacheFetchRetryPolicy());
+
+            var cache = builder.Create();
+
+            await Assert.ThrowsExceptionAsync<MissingMethodException>(() => cache.Cached.WithReturnValueAsync("param"));
+            Assert.AreSame(result, await cache.Cached.WithReturnValueAsync("param"));
+        }
         #endregion ICacheFetchRetryPolicy integration
 
         #region ICacheExpirationPolicy integration
@@ -1071,6 +1091,12 @@ namespace SuperCache.UnitTests
         object HasOutParameter(out string param);
         object HasOutParameter(out int param);
         int HasOutParameterValueTypeReturn(out int param);
+    }
+
+    public interface IAsync
+    {
+        Task NoReturnValueAsync(string param);
+        Task<object> WithReturnValueAsync(string param);
     }
 
     public static class ISetupExtensions

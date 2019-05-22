@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Threading.Tasks;
 
 namespace SuperCache.CodeGen
 {
@@ -50,11 +51,21 @@ namespace SuperCache.CodeGen
 
         private void BuildType()
         {
+            var iface = typeof(IFetchable<,>).MakeGenericType(_sourceType, method.ReturnType);
+
+            if (method.ReturnType.IsConstructedGenericType &&
+                method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>))
+            {
+                iface = typeof(IFetchableAsync<,>).MakeGenericType(
+                    _sourceType,
+                    method.ReturnType.GetGenericArguments()[0]);
+            }
+
             typeBuilder = _parent.CacheType.DefineNestedType(
                method.Name + "_Key_" + Guid.NewGuid().ToString("n"),
                TypeAttributes.NestedPublic,
                typeof(object),
-               new Type[] { typeof(IFetchable<,>).MakeGenericType(_sourceType, method.ReturnType) });
+               new Type[] { iface });
             var parameters = method.GetParameters();
             var parameterTypes = method.GetParameters().Select(p => p.ParameterType).ToArray();
             cacheKeyFields = new FieldBuilder[parameterTypes.Length];
@@ -63,7 +74,7 @@ namespace SuperCache.CodeGen
             var ctorGenerator = ctor.GetILGenerator();
 
             var fetch = typeBuilder.DefineMethod(
-                "Fetch",
+                iface.GetMethods()[0].Name,
                 MethodAttributes.Public | MethodAttributes.HideBySig | MethodAttributes.Virtual | MethodAttributes.Final,
                 method.ReturnType,
                 new Type[] { _sourceType });

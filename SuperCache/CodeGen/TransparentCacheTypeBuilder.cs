@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Threading.Tasks;
 
 namespace SuperCache.CodeGen
 {
@@ -98,7 +99,9 @@ namespace SuperCache.CodeGen
 
             foreach (var method in _sourceType.GetMethods())
             {
-                if (method.ReturnType == typeof(void) || method.GetParameters().Any(p => p.ParameterType.IsByRef))
+                if (method.ReturnType == typeof(void) ||
+                    method.GetParameters().Any(p => p.ParameterType.IsByRef) ||
+                    method.ReturnType == typeof(Task))
                 {
                     continue;
                 }
@@ -107,7 +110,17 @@ namespace SuperCache.CodeGen
                 _cacheKeyMap[method] = cacheKeyType;
                 var cacheSlotType = typeof(KeyedCacheSlot);
 
-                var cacheType = typeof(KeyedCache<,,>).MakeGenericType(_sourceType, cacheKeyType.TypeBuilder, method.ReturnType);
+                var baseType = typeof(KeyedCacheSync<,,>);
+                var resultType = method.ReturnType;
+
+                if (method.ReturnType.IsConstructedGenericType &&
+                    method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>))
+                {
+                    baseType = typeof(KeyedCacheAsync<,,>);
+                    resultType = method.ReturnType.GetGenericArguments()[0];
+                }
+
+                var cacheType = baseType.MakeGenericType(_sourceType, cacheKeyType.TypeBuilder, resultType);
                 var cacheField = _cacheType.DefineField("_" + cacheSlotType.Name, cacheType, FieldAttributes.Private);
 
                 _fieldMap[method] = cacheField;
@@ -115,7 +128,7 @@ namespace SuperCache.CodeGen
                 // initialize a KeyedCache instance in the ctor
                 _ctorGenerator.Emit(OpCodes.Ldarg_0);
                 _ctorGenerator.Emit(OpCodes.Ldarg_1);
-                _ctorGenerator.Emit(OpCodes.Newobj, TypeBuilder.GetConstructor(cacheType, typeof(KeyedCache<,,>).GetConstructors()[0]));
+                _ctorGenerator.Emit(OpCodes.Newobj, TypeBuilder.GetConstructor(cacheType, baseType.GetConstructors()[0]));
                 _ctorGenerator.Emit(OpCodes.Stfld, cacheField);
             }
 

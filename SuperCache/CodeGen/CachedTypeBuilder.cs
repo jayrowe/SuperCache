@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System;
+using System.Reflection;
 using System.Reflection.Emit;
 
 namespace SuperCache.CodeGen
@@ -10,21 +11,11 @@ namespace SuperCache.CodeGen
         {
         }
 
-        protected override string TypeName
-        {
-            get
-            {
-                return "Cached";
-            }
-        }
-
-        protected override string TargetMethod
-        {
-            get
-            {
-                return "Get";
-            }
-        }
+        protected override string TypeName => "Cached";
+        protected override Type TargetType => typeof(KeyedCacheSync<,,>);
+        protected override Type TargetTypeAsync => typeof(KeyedCacheAsync<,,>);
+        protected override string TargetMethod => "Get";
+        protected override string TargetMethodAsync => "GetAsync";
 
         protected override void EmitUncachedCall(ILGenerator methodGenerator, MethodInfo method)
         {

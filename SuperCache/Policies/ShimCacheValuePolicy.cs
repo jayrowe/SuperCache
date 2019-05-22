@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-
-namespace SuperCache.Policies
+﻿namespace SuperCache.Policies
 {
     internal class ShimCacheValuePolicy<TResult> : ICacheValuePolicy<TResult>
     {

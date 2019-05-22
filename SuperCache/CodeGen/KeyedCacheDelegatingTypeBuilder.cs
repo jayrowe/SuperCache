@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Threading.Tasks;
 
 namespace SuperCache.CodeGen
 {
@@ -17,9 +18,15 @@ namespace SuperCache.CodeGen
             _cacheTypeBuilder = cacheTypeBuilder;
         }
 
-        protected virtual string TypeName { get { return TargetMethod; } }
+        protected virtual string TypeName => TargetMethod;
+
+        protected virtual Type TargetType => typeof(KeyedCacheBase<,,>);
+
+        protected virtual Type TargetTypeAsync => TargetType;
 
         protected abstract string TargetMethod { get; }
+
+        protected virtual string TargetMethodAsync => TargetMethod;
 
         public TypeBuilder Type
         {
@@ -71,7 +78,9 @@ namespace SuperCache.CodeGen
 
                 var methodGenerator = methodBuilder.GetILGenerator();
 
-                if (method.ReturnType == typeof(void) || method.GetParameters().Any(p => p.ParameterType.IsByRef))
+                if (method.ReturnType == typeof(void) ||
+                    method.GetParameters().Any(p => p.ParameterType.IsByRef) ||
+                    method.ReturnType == typeof(Task))
                 {
                     EmitUncachedCall(methodGenerator, method);
                 }
@@ -90,10 +99,22 @@ namespace SuperCache.CodeGen
                     
                     methodGenerator.Emit(OpCodes.Newobj, cacheKeyType.Constructor);
 
-                    methodGenerator.Emit(OpCodes.Call,
-                        TypeBuilder.GetMethod(
-                            typeof(KeyedCache<,,>).MakeGenericType(_cacheTypeBuilder.SourceType, cacheKeyType.TypeBuilder, method.ReturnType),
-                            typeof(KeyedCache<,,>).GetMethod(TargetMethod)));
+                    if (method.ReturnType.IsConstructedGenericType &&
+                        method.ReturnType.GetGenericTypeDefinition() == typeof(Task<>))
+                    {
+                        methodGenerator.Emit(OpCodes.Call,
+                            TypeBuilder.GetMethod(
+                                TargetTypeAsync.MakeGenericType(_cacheTypeBuilder.SourceType, cacheKeyType.TypeBuilder, method.ReturnType.GetGenericArguments()[0]),
+                                TargetTypeAsync.GetMethod(TargetMethodAsync)));
+                    }
+                    else
+                    {
+                        methodGenerator.Emit(OpCodes.Call,
+                            TypeBuilder.GetMethod(
+                                TargetType.MakeGenericType(_cacheTypeBuilder.SourceType, cacheKeyType.TypeBuilder, method.ReturnType),
+                                TargetType.GetMethod(TargetMethod)));
+                    }
+
                     methodGenerator.Emit(OpCodes.Ret);
                 }
             }
