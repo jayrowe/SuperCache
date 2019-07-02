@@ -1,8 +1,9 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SuperCache.Policies;
 using SuperCache.UnitTests;
 using System;
 
-namespace SuperCache.Policies.UnitTests
+namespace SuperCache.UnitTests.Policies
 {
     [TestClass]
     public class DurationSinceFetchCacheExpirationPolicyTests

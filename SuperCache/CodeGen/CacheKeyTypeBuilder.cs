@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -19,8 +20,7 @@ namespace SuperCache.CodeGen
             this.method = method;
         }
 
-        private ModuleBuilder _moduleBuilder { get { return _parent._moduleBuilder; } }
-        private Type _sourceType { get { return _parent._sourceType; } }
+        private Type _sourceType => _parent._sourceType;
         public FieldBuilder[] cacheKeyFields { get; private set; }
 
         public TypeBuilder TypeBuilder
@@ -87,12 +87,6 @@ namespace SuperCache.CodeGen
                 typeof(int),
                 new Type[0]);
             var getHashCodeGenerator = getHashCode.GetILGenerator();
-            var hashCode = getHashCodeGenerator.DeclareLocal(typeof(int));
-
-            if (parameterTypes.Length == 0)
-            {
-                getHashCodeGenerator.Emit(OpCodes.Ldc_I4_0);
-            }
 
             var equals = typeBuilder.DefineMethod(
                 "Equals",
@@ -104,7 +98,8 @@ namespace SuperCache.CodeGen
 
             for (int index = 0; index < parameterTypes.Length; index++)
             {
-                cacheKeyFields[index] = typeBuilder.DefineField("_" + parameters[index].Name, parameterTypes[index], FieldAttributes.Public | FieldAttributes.InitOnly);
+                var cacheKeyField = typeBuilder.DefineField("_" + parameters[index].Name, parameterTypes[index], FieldAttributes.Public | FieldAttributes.InitOnly);
+                cacheKeyFields[index] = cacheKeyField;
 
                 // store field in constructor
                 ctorGenerator.Emit(OpCodes.Ldarg_0);
@@ -125,61 +120,48 @@ namespace SuperCache.CodeGen
                         break;
                 }
 
-                ctorGenerator.Emit(OpCodes.Stfld, cacheKeyFields[index]);
+                ctorGenerator.Emit(OpCodes.Stfld, cacheKeyField);
+
+                var comparer = typeof(EqualityComparer<>).MakeGenericType(cacheKeyField.FieldType);
+                var comparerInterface = typeof(IEqualityComparer<>).MakeGenericType(cacheKeyField.FieldType);
+
+                // Equals method
+                equalsGenerator.Emit(
+                    OpCodes.Call,
+                    comparer.GetProperty("Default", BindingFlags.Static | BindingFlags.Public).GetGetMethod());
 
                 equalsGenerator.Emit(OpCodes.Ldarg_0);
-                equalsGenerator.Emit(OpCodes.Ldfld, cacheKeyFields[index]);
+                equalsGenerator.Emit(OpCodes.Ldfld, cacheKeyField);
                 equalsGenerator.Emit(OpCodes.Ldarg_1);
-                equalsGenerator.Emit(OpCodes.Ldfld, cacheKeyFields[index]);
+                equalsGenerator.Emit(OpCodes.Ldfld, cacheKeyField);
 
-                switch (Type.GetTypeCode(cacheKeyFields[index].FieldType))
-                {
-                    case TypeCode.String:
-                        equalsGenerator.Emit(OpCodes.Call, typeof(string).GetMethod("Equals", BindingFlags.Static | BindingFlags.Public, null, new Type[] { typeof(string), typeof(string) }, null));
-                        equalsGenerator.Emit(OpCodes.Brfalse, fieldNotEqual);
-                        break;
-                    case TypeCode.Object:
-                        equalsGenerator.Emit(OpCodes.Call, typeof(object).GetMethod("Equals", BindingFlags.Static | BindingFlags.Public, null, new Type[] { typeof(object), typeof(object) }, null));
-                        equalsGenerator.Emit(OpCodes.Brfalse, fieldNotEqual);
-                        break;
-                    default:
-                        equalsGenerator.Emit(OpCodes.Bne_Un, fieldNotEqual);
-                        break;
-                }
+                equalsGenerator.Emit(
+                    OpCodes.Callvirt,
+                    comparerInterface.GetMethod("Equals", new[] { cacheKeyField.FieldType, cacheKeyField.FieldType }));
 
-                // GetHashCode method
-                var skipGetHashCode = getHashCodeGenerator.DefineLabel();
+                equalsGenerator.Emit(OpCodes.Brfalse, fieldNotEqual);
 
-                if (index > 0)
-                {
-                    getHashCodeGenerator.Emit(OpCodes.Dup);
-                    getHashCodeGenerator.Emit(OpCodes.Stloc_0);
-                }
+                // GetHashCode
+                getHashCodeGenerator.Emit(
+                    OpCodes.Call,
+                    comparer.GetProperty("Default", BindingFlags.Static | BindingFlags.Public).GetGetMethod());
 
-                // TODO: do smart things with integer types
                 getHashCodeGenerator.Emit(OpCodes.Ldarg_0);
-                getHashCodeGenerator.Emit(OpCodes.Ldfld, cacheKeyFields[index]);
-                getHashCodeGenerator.Emit(OpCodes.Dup);
-                getHashCodeGenerator.Emit(OpCodes.Brfalse, skipGetHashCode);
-                if (cacheKeyFields[index].FieldType.IsValueType)
-                {
-                    getHashCodeGenerator.Emit(OpCodes.Box, cacheKeyFields[index].FieldType);
-                }
-                getHashCodeGenerator.Emit(OpCodes.Callvirt, typeof(object).GetMethod("GetHashCode"));
-                getHashCodeGenerator.MarkLabel(skipGetHashCode);
-                // at this point we either have left a zero for this round or the actual hash code
+                getHashCodeGenerator.Emit(OpCodes.Ldfld, cacheKeyField);
+
+                getHashCodeGenerator.Emit(
+                    OpCodes.Callvirt,
+                    comparerInterface.GetMethod("GetHashCode", new[] { cacheKeyField.FieldType }));
 
                 if (index > 0)
                 {
-                    getHashCodeGenerator.Emit(OpCodes.Xor);
-                    getHashCodeGenerator.Emit(OpCodes.Ldloc_0);
-                    getHashCodeGenerator.Emit(OpCodes.Ldc_I4_5);
-                    getHashCodeGenerator.Emit(OpCodes.Shl);
-                    getHashCodeGenerator.Emit(OpCodes.Add);
+                    getHashCodeGenerator.Emit(
+                        OpCodes.Call,
+                        typeof(CacheKeyTypeBuilder).GetMethod("CombineHashCodes", BindingFlags.Static | BindingFlags.Public));
                 }
 
                 fetchGenerator.Emit(OpCodes.Ldarg_0);
-                fetchGenerator.Emit(OpCodes.Ldfld, cacheKeyFields[index]);
+                fetchGenerator.Emit(OpCodes.Ldfld, cacheKeyField);
             }
 
             equalsGenerator.Emit(OpCodes.Ldc_I4_1);
@@ -191,6 +173,10 @@ namespace SuperCache.CodeGen
             equalsGenerator.Emit(OpCodes.Ldc_I4_0);
             equalsGenerator.Emit(OpCodes.Ret);
 
+            if (cacheKeyFields.Length == 0)
+            {
+                getHashCodeGenerator.Emit(OpCodes.Ldc_I4_0);
+            }
             getHashCodeGenerator.Emit(OpCodes.Ret);
 
             fetchGenerator.Emit(OpCodes.Callvirt, method);
@@ -199,6 +185,12 @@ namespace SuperCache.CodeGen
             ctorGenerator.Emit(OpCodes.Ret);
 
             typeBuilder.CreateTypeInfo();
+        }
+
+        public static int CombineHashCodes(int h1, int h2)
+        {
+            uint num = (uint)((h1 << 5) | (int)((uint)h1 >> 27));
+            return ((int)num + h1) ^ h2;
         }
     }
 }

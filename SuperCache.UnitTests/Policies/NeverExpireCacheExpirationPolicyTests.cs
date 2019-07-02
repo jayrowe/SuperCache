@@ -1,6 +1,7 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using SuperCache.Policies;
 
-namespace SuperCache.Policies.UnitTests
+namespace SuperCache.UnitTests.Policies
 {
     [TestClass]
     public class NeverExpireCacheExpirationPolicyTests

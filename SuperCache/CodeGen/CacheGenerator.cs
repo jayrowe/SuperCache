@@ -15,7 +15,7 @@ namespace SuperCache.CodeGen
         {
             _type = type;
             _assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(
-                new System.Reflection.AssemblyName(type.FullName + ".SuperCache"),
+                new System.Reflection.AssemblyName($"SuperCache.{Guid.NewGuid().ToString("d")}"),
                 AssemblyBuilderAccess.RunAndCollect);
             _moduleBuilder = _assemblyBuilder.DefineDynamicModule("_module");
         }
