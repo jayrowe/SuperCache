@@ -591,6 +591,25 @@ namespace SuperCache.UnitTests
             await Assert.ThrowsExceptionAsync<MissingMethodException>(() => cache.Cached.WithReturnValueAsync("param"));
             Assert.AreSame(result, await cache.Cached.WithReturnValueAsync("param"));
         }
+
+        [TestMethod]
+        public async Task Async_WithDefaultValuePolicy()
+        {
+            var result = new object();
+
+            var sourceMock = new Mock<IAsync>();
+            sourceMock.Setup(i => i.WithReturnValueAsync("param")).ReturnsSequence(
+                () => Task.FromException<object>(new MissingMethodException("failed to load")),
+                () => Task.FromResult(result));
+
+            var builder = new TransparentCacheBuilder<IAsync>(sourceMock.Object);
+            builder.SetDefaultPolicy(new IdentityCacheValuePolicy());
+
+            var cache = builder.Create();
+
+            await Assert.ThrowsExceptionAsync<MissingMethodException>(() => cache.Cached.WithReturnValueAsync("param"));
+            Assert.AreSame(result, await cache.Cached.WithReturnValueAsync("param"));
+        }
         #endregion ICacheFetchRetryPolicy integration
 
         #region ICacheExpirationPolicy integration

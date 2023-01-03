@@ -2,6 +2,7 @@
 using SuperCache.Policies;
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace SuperCache
 {
@@ -41,6 +42,18 @@ namespace SuperCache
         }
 
         public TransparentCacheBuilder<T> SetPolicy<TResult>(ICacheValuePolicy<TResult> valuePolicy, Func<T, TResult> selector)
+        {
+            _specific.Add(
+                () =>
+                {
+                    IKeyedCache<TResult> cache = (IKeyedCache<TResult>)GetCache(selector);
+                    cache.ValuePolicy = valuePolicy;
+                });
+
+            return this;
+        }
+
+        public TransparentCacheBuilder<T> SetPolicy<TResult>(ICacheValuePolicy<TResult> valuePolicy, Func<T, Task<TResult>> selector)
         {
             _specific.Add(
                 () =>
